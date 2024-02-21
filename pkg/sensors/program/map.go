@@ -13,6 +13,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type MapType int
+
+const (
+	MapTypeGlobal MapType = iota
+	MapTypePolicy
+	MapTypeSensor
+	MapTypeProgram
+)
+
 // Map represents BPF maps.
 type Map struct {
 	Name      string
@@ -21,27 +30,47 @@ type Map struct {
 	Prog      *Program
 	PinState  State
 	MapHandle *ebpf.Map
+	Type      MapType
 }
 
-func mapBuilder(name, pin string, ld *Program) *Map {
-	m := &Map{name, pin, "", ld, Idle(), nil}
-	ld.PinMap[name] = m
+func mapBuilder(name, pin string, ty MapType, lds ...*Program) *Map {
+	m := &Map{name, pin, "", lds[0], Idle(), nil, ty}
+	for _, ld := range lds {
+		ld.PinMap[name] = m
+	}
 	return m
 }
 
 func MapBuilder(name string, ld *Program) *Map {
-	return mapBuilder(name, name, ld)
+	return mapBuilder(name, name, MapTypeGlobal, ld)
 }
 
 func MapBuilderPinManyProgs(name, pin string, lds ...*Program) *Map {
-	for _, ld := range lds {
-		ld.PinMap[name] = pin
-	}
-	return &Map{name, pin, lds[0], Idle(), nil}
+	return mapBuilder(name, pin, MapTypeGlobal, lds...)
+}
+
+func MapBuilderProgram(name string, ld *Program) *Map {
+	return mapBuilder(name, name, MapTypeProgram, ld)
+}
+
+func MapBuilderSensor(name string, ld *Program) *Map {
+	return mapBuilder(name, name, MapTypeSensor, ld)
+}
+
+func MapBuilderPolicy(name string, ld *Program) *Map {
+	return mapBuilder(name, name, MapTypePolicy, ld)
+}
+
+func MapBuilderType(name string, ty MapType, ld *Program) *Map {
+	return mapBuilder(name, name, ty, ld)
 }
 
 func MapBuilderPin(name, pin string, ld *Program) *Map {
-	return mapBuilder(name, pin, ld)
+	return mapBuilder(name, pin, MapTypeGlobal, ld)
+}
+
+func PolicyMapPath(mapDir, policy, name string) string {
+	return filepath.Join(mapDir, policy, name)
 }
 
 func (m *Map) Unload() error {
