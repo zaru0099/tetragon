@@ -25,7 +25,6 @@ const (
 // Map represents BPF maps.
 type Map struct {
 	Name      string
-	PinName   string
 	PinPath   string
 	Prog      *Program
 	PinState  State
@@ -33,8 +32,8 @@ type Map struct {
 	Type      MapType
 }
 
-func mapBuilder(name, pin string, ty MapType, lds ...*Program) *Map {
-	m := &Map{name, pin, "", lds[0], Idle(), nil, ty}
+func mapBuilder(name string, ty MapType, lds ...*Program) *Map {
+	m := &Map{name, "", lds[0], Idle(), nil, ty}
 	for _, ld := range lds {
 		ld.PinMap[name] = m
 	}
@@ -42,31 +41,31 @@ func mapBuilder(name, pin string, ty MapType, lds ...*Program) *Map {
 }
 
 func MapBuilder(name string, ld *Program) *Map {
-	return mapBuilder(name, name, MapTypeGlobal, ld)
+	return mapBuilder(name, MapTypeGlobal, ld)
 }
 
-func MapBuilderPinManyProgs(name, pin string, lds ...*Program) *Map {
-	return mapBuilder(name, pin, MapTypeGlobal, lds...)
+func MapBuilderMulti(name string, lds ...*Program) *Map {
+	return mapBuilder(name, MapTypeGlobal, lds...)
+}
+
+func MapBuilderMultiType(name string, ty MapType, lds ...*Program) *Map {
+	return mapBuilder(name, ty, lds...)
 }
 
 func MapBuilderProgram(name string, ld *Program) *Map {
-	return mapBuilder(name, name, MapTypeProgram, ld)
+	return mapBuilder(name, MapTypeProgram, ld)
 }
 
 func MapBuilderSensor(name string, ld *Program) *Map {
-	return mapBuilder(name, name, MapTypeSensor, ld)
+	return mapBuilder(name, MapTypeSensor, ld)
 }
 
 func MapBuilderPolicy(name string, ld *Program) *Map {
-	return mapBuilder(name, name, MapTypePolicy, ld)
+	return mapBuilder(name, MapTypePolicy, ld)
 }
 
 func MapBuilderType(name string, ty MapType, ld *Program) *Map {
-	return mapBuilder(name, name, ty, ld)
-}
-
-func MapBuilderPin(name, pin string, ld *Program) *Map {
-	return mapBuilder(name, pin, MapTypeGlobal, ld)
+	return mapBuilder(name, ty, ld)
 }
 
 func PolicyMapPath(mapDir, policy, name string) string {
@@ -74,7 +73,7 @@ func PolicyMapPath(mapDir, policy, name string) string {
 }
 
 func (m *Map) Unload() error {
-	log := logger.GetLogger().WithField("map", m.Name).WithField("pin", m.PinName)
+	log := logger.GetLogger().WithField("map", m.Name).WithField("pin", m.Name)
 	if !m.PinState.IsLoaded() {
 		log.WithField("count", m.PinState.count).Debug("Refusing to unload map as it is not loaded")
 		return nil

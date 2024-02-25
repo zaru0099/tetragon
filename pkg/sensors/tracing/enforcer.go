@@ -51,7 +51,7 @@ func init() {
 }
 
 func enforcerMap(load ...*program.Program) *program.Map {
-	return program.MapBuilderPinManyProgs(enforcerDataMapName, enforcerDataMapName, load...)
+	return program.MapBuilderMulti(enforcerDataMapName, load...)
 }
 
 func (kp *enforcerPolicy) enforcerGet(name string) (*enforcerHandler, bool) {
