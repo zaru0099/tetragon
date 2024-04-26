@@ -4,9 +4,14 @@
 package kprobemetrics
 
 import (
+	"fmt"
+	"syscall"
+
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/tetragon/pkg/bpf"
+	"github.com/cilium/tetragon/pkg/logger"
 	"github.com/cilium/tetragon/pkg/sensors"
+	"github.com/cilium/tetragon/pkg/sensors/base"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sys/unix"
 )
@@ -20,6 +25,52 @@ func NewBPFCollector() prometheus.Collector {
 
 func (c *bpfCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- MissedProbes.Desc()
+}
+
+type KprobeStatsValue struct {
+	Id      uint64
+	Nmissed uint64
+	Hit     uint64
+}
+
+func kprobeMissed(lnk link.Link) uint64 {
+	pe, ok := lnk.(link.PerfEvent)
+	if !ok {
+		return 0
+	}
+
+	file, err := pe.PerfEvent()
+	if err != nil {
+		return 0
+	}
+
+	fd := int(file.Fd())
+
+	id, err := unix.IoctlGetInt(fd, unix.PERF_EVENT_IOC_ID)
+	if err != nil {
+		logger.GetLogger().WithError(err).Warn("Failed to get kprobe event ID")
+	}
+
+	v := &KprobeStatsValue{
+		Id:      uint64(id),
+		Nmissed: 0,
+		Hit:     0,
+	}
+	base.KprobeStatsMap.MapHandle.Put(uint32(0), v)
+
+	var buf []byte
+	syscall.Read(fd, buf)
+
+	err = base.KprobeStatsMap.MapHandle.Lookup(int32(0), v)
+
+	if err == nil {
+		fmt.Printf("KRAVA id %d hit %d missed %d\n", id, v.Hit, v.Nmissed)
+	} else {
+		fmt.Printf("ERROR %v\n", err)
+	}
+
+	file.Close()
+	return v.Nmissed
 }
 
 func (c *bpfCollector) Collect(ch chan<- prometheus.Metric) {
@@ -47,6 +98,7 @@ func (c *bpfCollector) Collect(ch chan<- prometheus.Metric) {
 					missed, _ = kprobe.Missed()
 				}
 			} else {
+				missed = kprobeMissed(prog.Link)
 			}
 		case link.KprobeMultiType:
 			if bpf.HasMissedStatsKprobeMulti() {
