@@ -22,7 +22,7 @@ var (
 		"tracepoint/sys_execve",
 		"event_execve",
 		"execve",
-	)
+	).SetPolicy("base")
 
 	ExecveBprmCommit = program.Builder(
 		"bpf_execve_bprm_commit_creds.o",
@@ -30,7 +30,7 @@ var (
 		"kprobe/security_bprm_committing_creds",
 		"tg_kp_bprm_committing_creds",
 		"kprobe",
-	)
+	).SetPolicy("base")
 
 	Exit = program.Builder(
 		"bpf_exit.o",
@@ -38,7 +38,7 @@ var (
 		"kprobe/acct_process",
 		"event_exit",
 		"kprobe",
-	)
+	).SetPolicy("base")
 
 	Fork = program.Builder(
 		"bpf_fork.o",
@@ -46,7 +46,7 @@ var (
 		"kprobe/wake_up_new_task",
 		"kprobe_pid_clear",
 		"kprobe",
-	)
+	).SetPolicy("base")
 
 	CgroupRmdir = program.Builder(
 		"bpf_cgroup.o",
