@@ -303,7 +303,8 @@ func createMultiKprobeSensor(sensorPath, policyName string, multiIDs []idtable.E
 		"kprobe.multi/generic_kprobe",
 		pinPath,
 		"generic_kprobe").
-		SetLoaderData(multiIDs)
+		SetLoaderData(multiIDs).
+		SetPolicy(policyName)
 	progs = append(progs, load)
 
 	fdinstall := program.MapBuilderPin("fdinstall_map", sensors.PathJoin(sensorPath, "fdinstall_map"), load)
@@ -358,7 +359,8 @@ func createMultiKprobeSensor(sensorPath, policyName string, multiIDs []idtable.E
 			"multi_retkprobe",
 			"generic_kprobe").
 			SetRetProbe(true).
-			SetLoaderData(multiRetIDs)
+			SetLoaderData(multiRetIDs).
+			SetPolicy(policyName)
 		progs = append(progs, loadret)
 
 		retProbe := program.MapBuilderPin("retprobe_map", sensors.PathJoin(pinPath, "retprobe_map"), loadret)
@@ -845,7 +847,8 @@ func createKprobeSensorFromEntry(kprobeEntry *genericKprobe, sensorPath string,
 		"kprobe/generic_kprobe",
 		pinProg,
 		"generic_kprobe").
-		SetLoaderData(kprobeEntry.tableId)
+		SetLoaderData(kprobeEntry.tableId).
+		SetPolicy(kprobeEntry.policyName)
 	load.Override = kprobeEntry.hasOverride
 	if load.Override {
 		load.OverrideFmodRet = isSecurityFunc && bpf.HasModifyReturn()
@@ -912,7 +915,8 @@ func createKprobeSensorFromEntry(kprobeEntry *genericKprobe, sensorPath string,
 			pinRetProg,
 			"generic_kprobe").
 			SetRetProbe(true).
-			SetLoaderData(kprobeEntry.tableId)
+			SetLoaderData(kprobeEntry.tableId).
+			SetPolicy(kprobeEntry.policyName)
 		progs = append(progs, loadret)
 
 		retProbe := program.MapBuilderPin("retprobe_map", sensors.PathJoin(pinPath, "retprobe_map"), loadret)
