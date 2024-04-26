@@ -68,6 +68,7 @@ func detectKprobeMulti() bool {
 }
 
 func HasKprobeMulti() bool {
+	return false
 	kprobeMulti.init.Do(func() {
 		kprobeMulti.detected = detectKprobeMulti()
 	})

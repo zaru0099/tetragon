@@ -34,6 +34,7 @@ type KprobeStatsValue struct {
 }
 
 func kprobeMissed(lnk link.Link) uint64 {
+	fmt.Printf("KRAVA kprobeMissed1\n")
 	pe, ok := lnk.(link.PerfEvent)
 	if !ok {
 		return 0
@@ -45,6 +46,8 @@ func kprobeMissed(lnk link.Link) uint64 {
 	}
 
 	fd := int(file.Fd())
+
+	fmt.Printf("KRAVA kprobeMissed2 fd %d\n", fd)
 
 	id, err := unix.IoctlGetInt(fd, unix.PERF_EVENT_IOC_ID)
 	if err != nil {

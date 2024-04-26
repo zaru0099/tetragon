@@ -36,8 +36,9 @@ kprobe_stats(struct pt_regs *ctx)
 	struct list_head *list;
 	struct trace_probe *tp;
 	struct trace_kprobe *tk;
-	unsigned long nmissed;
+	unsigned long nmissed = 0, nmissed2 = 0;
 	__u64 id;
+	int err;
 
 	stats = map_lookup_elem(&kprobe_stats_map, &(__u32){ 0 });
 	if (!stats)
@@ -99,7 +100,15 @@ kprobe_stats(struct pt_regs *ctx)
 
 	nmissed = (unsigned long) BPF_CORE_READ(tk, rp.kp.nmissed);
 
-	bpf_printk("nmissed %lx\n", (unsigned long) nmissed);
+	bpf_printk("nmissed  %lx\n", (unsigned long) nmissed);
+
+        __builtin_preserve_access_index(({
+
+	err = probe_read_kernel(&nmissed2, sizeof(nmissed2), (void *) nmissed);
+
+	}));
+
+	bpf_printk("nmissed2 %lx err %d\n", (unsigned long) nmissed2, err);
 
 	stats->nmissed = nmissed;
 	stats->hit = 1;
