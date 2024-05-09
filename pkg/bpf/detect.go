@@ -32,6 +32,7 @@ var (
 	buildid                Feature
 	modifyReturn           Feature
 	modifyReturnSyscall    Feature
+	missedStatsPerfEvent   Feature
 	missedStatsKprobeMulti Feature
 )
 
@@ -264,9 +265,51 @@ func HasMissedStatsKprobeMulti() bool {
 	return missedStatsKprobeMulti.detected
 }
 
+func detectMissedStatsPerfEvent() bool {
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Name: "probe_bpf_kprobe_perf_event_link",
+		Type: ebpf.Kprobe,
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+		License: "MIT",
+	})
+	if err != nil {
+		return false
+	}
+	defer prog.Close()
+
+	lnk, err := link.Kprobe("vprintk", prog, nil)
+	if err != nil {
+		return false
+	}
+	defer lnk.Close()
+
+	info, err := lnk.Info()
+	if err != nil {
+		return false
+	}
+
+	pevent := info.PerfEvent()
+	kp := pevent.Kprobe()
+	addr, ok := kp.Address()
+	if !ok || addr == 0 {
+		return false
+	}
+	return true
+}
+
+func HasMissedStatsPerfEvent() bool {
+	missedStatsPerfEvent.init.Do(func() {
+		missedStatsPerfEvent.detected = detectMissedStatsPerfEvent()
+	})
+	return missedStatsPerfEvent.detected
+}
+
 func LogFeatures() string {
-	return fmt.Sprintf("override_return: %t, buildid: %t, kprobe_multi: %t, uprobe_multi %t, fmodret: %t, fmodret_syscall: %t, signal: %t, large: %t, missed_stats_kprobe_multi: %t",
+	return fmt.Sprintf("override_return: %t, buildid: %t, kprobe_multi: %t, uprobe_multi %t, fmodret: %t, fmodret_syscall: %t, signal: %t, large: %t, missed_stats_kprobe_multi: %t, missed_stats_perf_event: %t",
 		HasOverrideHelper(), HasBuildId(), HasKprobeMulti(), HasUprobeMulti(),
 		HasModifyReturn(), HasModifyReturnSyscall(), HasSignalHelper(), HasProgramLargeSize(),
-		HasMissedStatsKprobeMulti())
+		HasMissedStatsKprobeMulti(), HasMissedStatsPerfEvent())
 }
