@@ -83,6 +83,8 @@ type programStats struct {
 	runtime time.Duration
 	// Total number of times the program was called.
 	runCount uint64
+	// Total number of timer the programm was NOT called.
+	recursionMisses uint64
 }
 
 // ProgramInfo describes a program.
@@ -125,8 +127,9 @@ func newProgramInfoFromFd(fd *sys.FD) (*ProgramInfo, error) {
 		Name: unix.ByteSliceToString(info.Name[:]),
 		btf:  btf.ID(info.BtfId),
 		stats: &programStats{
-			runtime:  time.Duration(info.RunTimeNs),
-			runCount: info.RunCnt,
+			runtime:         time.Duration(info.RunTimeNs),
+			runCount:        info.RunCnt,
+			recursionMisses: info.RecursionMisses,
 		},
 	}
 
@@ -257,6 +260,15 @@ func (pi *ProgramInfo) Runtime() (time.Duration, bool) {
 		return pi.stats.runtime, true
 	}
 	return time.Duration(0), false
+}
+
+// RecursionMisses returns the total number of times the program was NOT called.
+//
+// It is INDEPENDENT on whether collection of statistics is enabled or not, but
+// it keeps the return values pattern as the other stats accessors and returns
+// bool (allways true) together with the counter value.
+func (pi *ProgramInfo) RecursionMisses() (uint64, bool) {
+	return pi.stats.recursionMisses, true
 }
 
 // Instructions returns the 'xlated' instruction stream of the program
