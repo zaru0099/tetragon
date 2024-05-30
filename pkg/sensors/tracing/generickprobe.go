@@ -258,7 +258,7 @@ func filterMaps(load *program.Program, kprobeEntry *genericKprobe) []*program.Ma
 	return maps
 }
 
-func createMultiKprobeSensor(multiIDs []idtable.EntryID) ([]*program.Program, []*program.Map, error) {
+func createMultiKprobeSensor(multiIDs []idtable.EntryID, hasEnforcer bool) ([]*program.Program, []*program.Map, error) {
 	var multiRetIDs []idtable.EntryID
 	var progs []*program.Program
 	var maps []*program.Map
@@ -336,8 +336,10 @@ func createMultiKprobeSensor(multiIDs []idtable.EntryID) ([]*program.Program, []
 		maps = append(maps, socktrack)
 	}
 
-	enforcerDataMap := enforcerMap(load)
-	maps = append(maps, enforcerDataMap)
+	if hasEnforcer {
+		enforcerDataMap := enforcerMap(load)
+		maps = append(maps, enforcerDataMap)
+	}
 
 	filterMap.SetMaxEntries(len(multiIDs))
 	configMap.SetMaxEntries(len(multiIDs))
@@ -563,6 +565,8 @@ func createGenericKprobeSensor(
 		selMaps:       selMaps,
 	}
 
+	hasEnforcer := len(spec.Enforcers) != 0
+
 	for i := range kprobes {
 		syms, syscall, err := getKprobeSymbols(kprobes[i].Call, kprobes[i].Syscall, lists)
 		if err != nil {
@@ -582,9 +586,9 @@ func createGenericKprobeSensor(
 	}
 
 	if useMulti {
-		progs, maps, err = createMultiKprobeSensor(ids)
+		progs, maps, err = createMultiKprobeSensor(ids, hasEnforcer)
 	} else {
-		progs, maps, err = createSingleKprobeSensor(ids)
+		progs, maps, err = createSingleKprobeSensor(ids, hasEnforcer)
 	}
 
 	if err != nil {
@@ -818,7 +822,8 @@ func addKprobe(funcName string, f *v1alpha1.KProbeSpec, in *addKprobeIn) (id idt
 }
 
 func createKprobeSensorFromEntry(kprobeEntry *genericKprobe,
-	progs []*program.Program, maps []*program.Map) ([]*program.Program, []*program.Map) {
+	progs []*program.Program, maps []*program.Map,
+	hasEnforcer bool) ([]*program.Program, []*program.Map) {
 
 	loadProgName, loadProgRetName := kernels.GenericKprobeObjs()
 	isSecurityFunc := strings.HasPrefix(kprobeEntry.funcName, "security_")
@@ -884,8 +889,10 @@ func createKprobeSensorFromEntry(kprobeEntry *genericKprobe,
 		maps = append(maps, socktrack)
 	}
 
-	enforcerDataMap := enforcerMap(load)
-	maps = append(maps, enforcerDataMap)
+	if hasEnforcer {
+		enforcerDataMap := enforcerMap(load)
+		maps = append(maps, enforcerDataMap)
+	}
 
 	if kprobeEntry.loadArgs.retprobe {
 		pinRetProg := sensors.PathJoin(fmt.Sprintf("%s_return", kprobeEntry.funcName))
@@ -931,7 +938,7 @@ func createKprobeSensorFromEntry(kprobeEntry *genericKprobe,
 	return progs, maps
 }
 
-func createSingleKprobeSensor(ids []idtable.EntryID) ([]*program.Program, []*program.Map, error) {
+func createSingleKprobeSensor(ids []idtable.EntryID, hasEnforcer bool) ([]*program.Program, []*program.Map, error) {
 	var progs []*program.Program
 	var maps []*program.Map
 
@@ -941,7 +948,7 @@ func createSingleKprobeSensor(ids []idtable.EntryID) ([]*program.Program, []*pro
 			return nil, nil, err
 		}
 		gk.data = &genericKprobeData{}
-		progs, maps = createKprobeSensorFromEntry(gk, progs, maps)
+		progs, maps = createKprobeSensorFromEntry(gk, progs, maps, hasEnforcer)
 	}
 
 	return progs, maps, nil
