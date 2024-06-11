@@ -7,6 +7,14 @@
 #include "bpf_tracing.h"
 
 #define POLICY_FILTER_MAX_POLICIES 128
+#define POLICY_FILTER_MAX_NAMESPACES 1024
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, POLICY_FILTER_MAX_NAMESPACES);
+	__uint(key_size, sizeof(u64));
+	__uint(value_size, sizeof(u64));
+} cgroup_namespace_map SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);

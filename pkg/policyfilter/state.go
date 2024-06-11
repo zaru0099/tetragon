@@ -249,6 +249,9 @@ type state struct {
 	// polify filters (outer) map handle
 	pfMap PfMap
 
+	// global policy map handle
+	global *NamespaceMap
+
 	cgidFinder cgidFinder
 }
 
@@ -275,6 +278,11 @@ func newState(
 	}
 
 	ret.pfMap, err = newPfMap()
+	if err != nil {
+		return nil, err
+	}
+
+	ret.global, err = newNamespaceMap()
 	if err != nil {
 		return nil, err
 	}
@@ -553,6 +561,11 @@ func (m *state) addPodContainers(pod *podInfo, containerIDs []string,
 		"namespace":       pod.namespace,
 		"containers-info": cinfo,
 	}).Info("addPodContainers: container(s) added")
+
+	// update global
+	if m.global != nil {
+		m.global.addCgroupIDs(cinfo)
+	}
 
 	// update matching policy maps
 	for _, policyID := range pod.matchedPolicies {
