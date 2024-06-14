@@ -62,6 +62,7 @@ const (
 	// much kernel memory when enabled.
 	stackTraceMapMaxEntries = 32768
 	ratelimitMapMaxEntries  = 32768
+	fdInstallMapMaxEntries  = 32000
 )
 
 func kprobeCharBufErrorToString(e int32) string {
@@ -143,6 +144,11 @@ type genericKprobe struct {
 
 	// is there ratelimit defined in the kprobe
 	hasRatelimit bool
+
+	// is the fdinstall feature used in the kprobe? This one should be uniform
+	// across all the kprobe from the same policy since the fdinstall map is
+	// shared between them
+	hasFDInstall bool
 
 	customHandler eventhandler.Handler
 }
@@ -279,6 +285,7 @@ func createMultiKprobeSensor(sensorPath, policyName string, multiIDs []idtable.E
 	data := &genericKprobeData{}
 	oneKprobeHasStackTrace := false
 	oneKprobeHasRatelimit := false
+	resizeFDInstall := false
 
 	for _, id := range multiIDs {
 		gk, err := genericKprobeTableGet(id)
@@ -290,6 +297,10 @@ func createMultiKprobeSensor(sensorPath, policyName string, multiIDs []idtable.E
 		}
 		oneKprobeHasStackTrace = oneKprobeHasStackTrace || gk.hasStackTrace
 		oneKprobeHasRatelimit = oneKprobeHasRatelimit || gk.hasRatelimit
+		// it should be overkill (we could just get the value of the first)
+		// because the caller should have already uniformized hasFDInstall
+		// between all the kprobes
+		resizeFDInstall = resizeFDInstall || gk.hasFDInstall
 		gk.data = data
 	}
 
@@ -315,6 +326,9 @@ func createMultiKprobeSensor(sensorPath, policyName string, multiIDs []idtable.E
 	progs = append(progs, load)
 
 	fdinstall := program.MapBuilderPin("fdinstall_map", sensors.PathJoin(sensorPath, "fdinstall_map"), load)
+	if resizeFDInstall {
+		fdinstall.SetMaxEntries(fdInstallMapMaxEntries)
+	}
 	maps = append(maps, fdinstall)
 
 	configMap := program.MapBuilderPin("config_map", sensors.PathJoin(pinPath, "config_map"), load)
@@ -392,6 +406,9 @@ func createMultiKprobeSensor(sensorPath, policyName string, multiIDs []idtable.E
 		maps = append(maps, callHeap)
 
 		fdinstall := program.MapBuilderPin("fdinstall_map", sensors.PathJoin(sensorPath, "fdinstall_map"), loadret)
+		if resizeFDInstall {
+			fdinstall.SetMaxEntries(fdInstallMapMaxEntries)
+		}
 		maps = append(maps, fdinstall)
 
 		socktrack := program.MapBuilderPin("socktrack_map", sensors.PathJoin(sensorPath, "socktrack_map"), loadret)
@@ -529,6 +546,9 @@ type addKprobeIn struct {
 	policyID      policyfilter.PolicyID
 	customHandler eventhandler.Handler
 	selMaps       *selectors.KernelSelectorMaps
+	// if one of the kprobe in the policy need fdinstall, all of them needs to
+	// be created with resized fdinstall_map
+	oneKprobeHasFDInstall bool
 }
 
 func getKprobeSymbols(symbol string, syscall bool, lists []v1alpha1.ListSpec) ([]string, bool, error) {
@@ -578,13 +598,24 @@ func createGenericKprobeSensor(
 		selMaps = &selectors.KernelSelectorMaps{}
 	}
 
+	// detect at the policy level if one kprobe uses the fdinstall feature and
+	// then enable that in all of them in addKprobe
+	oneKprobeHasFDInstall := false
+	for _, kprobe := range kprobes {
+		if selectorsHaveFDInstall(kprobe.Selectors) {
+			oneKprobeHasFDInstall = true
+			break
+		}
+	}
+
 	in := addKprobeIn{
-		useMulti:      useMulti,
-		sensorPath:    name,
-		policyID:      policyID,
-		policyName:    policyName,
-		customHandler: customHandler,
-		selMaps:       selMaps,
+		useMulti:              useMulti,
+		sensorPath:            name,
+		policyID:              policyID,
+		policyName:            policyName,
+		customHandler:         customHandler,
+		selMaps:               selMaps,
+		oneKprobeHasFDInstall: oneKprobeHasFDInstall,
 	}
 
 	for i := range kprobes {
@@ -801,6 +832,7 @@ func addKprobe(funcName string, f *v1alpha1.KProbeSpec, in *addKprobeIn) (id idt
 		tags:              tagsField,
 		hasStackTrace:     selectorsHaveStackTrace(f.Selectors),
 		hasRatelimit:      selectorsHaveRateLimit(f.Selectors),
+		hasFDInstall:      in.oneKprobeHasFDInstall,
 	}
 
 	// Parse Filters into kernel filter logic
@@ -863,6 +895,9 @@ func createKprobeSensorFromEntry(kprobeEntry *genericKprobe, sensorPath string,
 	progs = append(progs, load)
 
 	fdinstall := program.MapBuilderPin("fdinstall_map", sensors.PathJoin(sensorPath, "fdinstall_map"), load)
+	if kprobeEntry.hasFDInstall {
+		fdinstall.SetMaxEntries(fdInstallMapMaxEntries)
+	}
 	maps = append(maps, fdinstall)
 
 	configMap := program.MapBuilderPin("config_map", sensors.PathJoin(pinPath, "config_map"), load)
@@ -954,6 +989,9 @@ func createKprobeSensorFromEntry(kprobeEntry *genericKprobe, sensorPath string,
 		maps = append(maps, callHeap)
 
 		fdinstall := program.MapBuilderPin("fdinstall_map", sensors.PathJoin(sensorPath, "fdinstall_map"), loadret)
+		if kprobeEntry.hasFDInstall {
+			fdinstall.SetMaxEntries(fdInstallMapMaxEntries)
+		}
 		maps = append(maps, fdinstall)
 
 		if kernels.EnableLargeProgs() {
@@ -1310,6 +1348,19 @@ func selectorsHaveStackTrace(selectors []v1alpha1.KProbeSelector) bool {
 	for _, selector := range selectors {
 		for _, matchAction := range selector.MatchActions {
 			if matchAction.KernelStackTrace || matchAction.UserStackTrace {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func selectorsHaveFDInstall(sel []v1alpha1.KProbeSelector) bool {
+	for _, selector := range sel {
+		for _, matchAction := range selector.MatchActions {
+			if a := selectors.ActionTypeFromString(matchAction.Action); a == selectors.ActionTypeFollowFd ||
+				a == selectors.ActionTypeUnfollowFd ||
+				a == selectors.ActionTypeCopyFd {
 				return true
 			}
 		}

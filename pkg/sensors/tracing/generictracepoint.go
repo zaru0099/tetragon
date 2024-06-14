@@ -93,6 +93,9 @@ type genericTracepoint struct {
 
 	// custom event handler
 	customHandler eventhandler.Handler
+
+	// is the fdinstall feature used in the tracepoint
+	hasFDInstall bool
 }
 
 // genericTracepointArg is the internal representation of an output value of a
@@ -347,6 +350,7 @@ func createGenericTracepoint(
 		customHandler: customHandler,
 		message:       msgField,
 		tags:          tagsField,
+		hasFDInstall:  selectorsHaveFDInstall(conf.Selectors),
 	}
 
 	genericTracepointTable.addTracepoint(ret)
@@ -405,6 +409,9 @@ func createGenericTracepointSensor(
 		progs = append(progs, prog0)
 
 		fdinstall := program.MapBuilderPin("fdinstall_map", sensors.PathJoin(pinPath, "fdinstall_map"), prog0)
+		if tp.hasFDInstall {
+			fdinstall.SetMaxEntries(fdInstallMapMaxEntries)
+		}
 		maps = append(maps, fdinstall)
 
 		tailCalls := program.MapBuilderPin("tp_calls", sensors.PathJoin(pinPath, "tp_calls"), prog0)
